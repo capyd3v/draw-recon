@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escaner Arcana - Reconocedor de Forja</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #0b0d17;
+            color: #e2e8f0;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(20, 184, 166, 0.08) 0%, transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.08) 0%, transparent 25%),
+                linear-gradient(to bottom, #070913, #0d1124);
+        }
+
+        .title-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Glassmorphism Cyberpunk Cards */
+        .cyber-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5),
+                        inset 0 0 15px rgba(56, 189, 248, 0.05);
+        }
+
+        .cyber-glow-cyan {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        }
+
+        .cyber-glow-purple {
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        }
+
+        /* Scanner Animation Effects */
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, #06b6d4, #a855f7, #06b6d4, transparent);
+            box-shadow: 0 0 15px #06b6d4, 0 0 25px #a855f7;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        @keyframes scanning {
+            0% { top: 0%; opacity: 1; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .is-scanning {
+            animation: scanning 1.8s ease-in-out infinite;
+        }
+
+        /* Responsive Canvas wrapper styling */
+        .canvas-container {
+            touch-action: none;
+            position: relative;
+            background: radial-gradient(circle, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 2px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .canvas-grid {
+            background-size: 20px 20px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #06b6d4;
+            border-radius: 3px;
+        }
+
+        /* SVG Reveal Animation */
+        @keyframes svgReveal {
+            0% { opacity: 0; transform: scale(0.6) rotate(-10deg); filter: drop-shadow(0 0 0px rgba(6,182,212,0)); }
+            50% { transform: scale(1.05) rotate(3deg); filter: drop-shadow(0 0 25px rgba(168,85,247,0.8)); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 15px rgba(6,182,212,0.6)); }
+        }
+
+        .svg-reveal {
+            animation: svgReveal 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Color Picker Radio Customizing */
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        .color-dot.active {
+            transform: scale(1.2);
+            border-color: #ffffff;
+            box-shadow: 0 0 10px currentColor;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 md:p-6">
+
+    <header class="max-w-7xl w-full mx-auto mb-4 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-cyan-500/20 pb-4">
+        <div class="flex items-center space-x-3">
+            <div class="bg-cyan-500/10 p-2.5 rounded-xl border border-cyan-500/40 text-cyan-400">
+                <i class="fa-solid fa-wand-magic-sparkles text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="title-font text-2xl md:text-3xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-teal-300 to-purple-500">
+                    ESCÁNER ARCANA v2.0
+                </h1>
+                <p class="text-xs text-slate-400 tracking-widest uppercase">Forja de Objetos & Reconocimiento de Formas JS</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs font-mono bg-slate-900/80 px-4 py-2 rounded-lg border border-slate-700/60">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-slate-300">SISTEMA LISTO:</span>
+            <span class="text-cyan-400 font-bold">ESPADA | MARTILLO | ESCUDO</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-grow">
+        
+        <!-- CANVAS SECTION (Left 7 Columns) -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            <div class="cyber-card p-4 rounded-2xl relative">
+                
+                <!-- Canvas Top Bar Controls -->
+                <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-pen-nib text-cyan-400 text-sm"></i>
+                        <span class="text-sm font-semibold tracking-wider text-slate-200">LIENZO DE FORJA</span>
+                    </div>
+
+                    <!-- Action Buttons for Clearing / Undoing -->
+                    <div class="flex items-center gap-2">
+                        <button id="btn-undo" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 text-xs flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-rotate-left"></i> Deshacer
+                        </button>
+                        <button id="btn-clear" class="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 px-3 py-1.5 rounded-lg border border-rose-800/50 text-xs flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-trash-can"></i> Limpiar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Canvas Drawing Container -->
+                <div class="canvas-container canvas-grid w-full h-[380px] md:h-[460px] relative">
+                    <div id="scan-line" class="scan-line"></div>
+                    <canvas id="drawing-canvas" class="w-full h-full cursor-crosshair block"></canvas>
+                    
+                    <!-- Watermark / Placeholder Text when blank -->
+                    <div id="canvas-placeholder" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-slate-600 opacity-60">
+                        <i class="fa-solid fa-hand-pointer text-4xl mb-2 animate-bounce"></i>
+                        <p class="text-sm font-medium">Dibuja una Espada, Martillo o Escudo aquí</p>
+                    </div>
+                </div>
+
+                <!-- Drawing Toolbar Controls -->
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-800">
+                    
+                    <!-- Color Selector -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-400 font-mono">COLOR:</span>
+                        <div class="flex items-center gap-2" id="color-palette">
+                            <button class="color-dot active" style="background-color: #06b6d4;" data-color="#06b6d4"></button>
+                            <button class="color-dot" style="background-color: #a855f7;" data-color="#a855f7"></button>
+                            <button class="color-dot" style="background-color: #f43f5e;" data-color="#f43f5e"></button>
+                            <button class="color-dot" style="background-color: #eab308;" data-color="#eab308"></button>
+                            <button class="color-dot" style="background-color: #f8fafc;" data-color="#f8fafc"></button>
+                        </div>
+                    </div>
+
+                    <!-- Brush Size Slider -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-400 font-mono">GROSOR:</span>
+                        <input type="range" id="brush-size" min="4" max="28" value="12" class="w-24 md:w-32 accent-cyan-400 cursor-pointer">
+                        <span id="brush-size-val" class="text-xs font-mono text-cyan-400 w-6">12px</span>
+                    </div>
+                </div>
+
+                <!-- Big Scan / Analyze Button -->
+                <button id="btn-analyze" class="w-full mt-4 py-3.5 px-6 rounded-xl font-bold tracking-widest text-base title-font uppercase bg-gradient-to-r from-cyan-500 via-teal-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-slate-950 shadow-lg cyber-glow-cyan hover:cyber-glow-purple transition-all duration-300 flex items-center justify-center gap-3 active:scale-[0.99]">
+                    <i class="fa-solid fa-radar text-lg"></i> Escanear y Analizar Silueta
+                </button>
+            </div>
+        </section>
+
+        <!-- RESULTS & ANALYTICS PANEL (Right 5 Columns) -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Result Display Card -->
+            <div class="cyber-card p-5 rounded-2xl flex flex-col items-center text-center relative min-h-[380px] justify-between">
+                
+                <div class="w-full flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                    <span class="text-xs font-mono text-cyan-400 tracking-wider">DIAGNÓSTICO ARCANA</span>
+                    <span id="match-confidence" class="text-xs font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800/60">
+                        ESPERANDO
+                    </span>
+                </div>
+
+                <!-- SVG Output Display Container -->
+                <div id="result-display-container" class="w-full my-auto py-4 flex flex-col items-center justify-center min-h-[220px]">
+                    <div id="result-svg-holder" class="w-48 h-48 flex items-center justify-center text-slate-700">
+                        <i class="fa-solid fa-shield-halved text-7xl opacity-20 animate-pulse"></i>
+                    </div>
+                    
+                    <h2 id="result-title" class="title-font text-xl font-bold text-slate-300 mt-3">
+                        Sin Análisis Aún
+                    </h2>
+                    <p id="result-description" class="text-sm text-slate-400 mt-1 max-w-xs leading-relaxed">
+                        Realiza un dibujo en el lienzo con los trazos principales del objeto y presiona "Escanear".
+                    </p>
+                </div>
+
+                <!-- Realtime Spatial Matrix Metrics -->
+                <div class="w-full bg-slate-950/60 rounded-xl p-3 border border-slate-800 text-left text-xs font-mono space-y-1.5">
+                    <div class="text-slate-500 font-bold mb-1 border-b border-slate-800/80 pb-1 flex justify-between">
+                        <span>METRICAS EXTRAÍDAS</span>
+                        <i class="fa-solid fa-chart-simple"></i>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-slate-300">
+                        <div>Rel. Aspecto: <span id="metric-aspect" class="text-cyan-400 font-bold">0.00</span></div>
+                        <div>Densidad Alto/Bajo: <span id="metric-density-tb" class="text-purple-400 font-bold">0.00</span></div>
+                        <div>Centro Masa Y: <span id="metric-cmy" class="text-emerald-400 font-bold">0.00</span></div>
+                        <div>Puntos Trazo: <span id="metric-points" class="text-amber-400 font-bold">0</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RPG Guide & Tips -->
+            <div class="cyber-card p-4 rounded-2xl text-xs space-y-2 text-slate-300">
+                <div class="font-bold text-cyan-400 flex items-center gap-2 title-font">
+                    <i class="fa-solid fa-book-bookmark"></i> GUÍA DE DIBUJO PARA LA FORJA
+                </div>
+                <ul class="space-y-1.5 list-disc list-inside text-slate-400 leading-relaxed">
+                    <li><strong class="text-slate-200">Espada:</strong> Dibuja una figura alargada vertical/diagonal con hoja delgada y guarda/empuñadura en la base.</li>
+                    <li><strong class="text-slate-200">Martillo:</strong> Dibuja un mango vertical delgado con un bloque horizontal o cabeza ancha en la cima (T-Shape).</li>
+                    <li><strong class="text-slate-200">Escudo:</strong> Dibuja una forma ancha y compacta, redondeada, triangular o blasonada equilibrada.</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer class="max-w-7xl w-full mx-auto mt-6 pt-3 border-t border-slate-800 text-center text-xs text-slate-500 font-mono">
+        ESCANER ARCANA ARCHETYPE ENGINE &copy; 2026 - HTML5 Canvas Pixel Heuristics
+    </footer>
+
+    <!-- Hidden SVGs for Dynamic Rendering -->
+    <div id="svg-templates" class="hidden">
+        
+        <!-- SWORD SVG -->
+        <template id="svg-espada">
+            <svg viewBox="0 0 200 200" class="w-full h-full svg-reveal" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="bladeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#38bdf8" />
+                        <stop offset="50%" stop-color="#818cf8" />
+                        <stop offset="100%" stop-color="#c084fc" />
+                    </linearGradient>
+                    <linearGradient id="hiltGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#f59e0b" />
+                        <stop offset="100%" stop-color="#d97706" />
+                    </linearGradient>
+                    <filter id="glowSword" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="6" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                </defs>
+                <!-- Energy aura -->
+                <path d="M100 15 L118 100 L112 135 L100 142 L88 135 L82 100 Z" fill="rgba(56,189,248,0.25)" filter="url(#glowSword)" />
+                <!-- Blade -->
+                <path d="M100 15 L114 95 L108 135 L100 140 L92 135 L86 95 Z" fill="url(#bladeGrad)" stroke="#e0f2fe" stroke-width="1.5"/>
+                <!-- Blade Center Line -->
+                <line x1="100" y1="20" x2="100" y2="135" stroke="#ffffff" stroke-width="2" opacity="0.8"/>
+                <!-- Guard -->
+                <path d="M60 135 C 80 130, 120 130, 140 135 C 145 137, 140 145, 125 143 C 110 141, 90 141, 75 143 C 60 145, 55 137, 60 135 Z" fill="url(#hiltGrad)" stroke="#fef3c7" stroke-width="1"/>
+                <!-- Gem in guard -->
+                <polygon points="100,133 105,138 100,143 95,138" fill="#ef4444"/>
+                <!-- Grip -->
+                <rect x="94" y="143" width="12" height="32" rx="3" fill="#1e293b" stroke="#d97706" stroke-width="1.5"/>
+                <!-- Grip Wraps -->
+                <line x1="94" y1="150" x2="106" y2="152" stroke="#d97706" stroke-width="1.5"/>
+                <line x1="94" y1="158" x2="106" y2="160" stroke="#d97706" stroke-width="1.5"/>
+                <line x1="94" y1="166" x2="106" y2="168" stroke="#d97706" stroke-width="1.5"/>
+                <!-- Pommel -->
+                <circle cx="100" cy="180" r="9" fill="url(#hiltGrad)" stroke="#fef3c7" stroke-width="1.5"/>
+                <!-- Runes / Magic Sparks -->
+                <circle cx="100" cy="50" r="2" fill="#ffffff" class="animate-ping"/>
+                <circle cx="100" cy="90" r="1.5" fill="#ffffff"/>
+            </svg>
+        </template>
+
+        <!-- HAMMER SVG -->
+        <template id="svg-martillo">
+            <svg viewBox="0 0 200 200" class="w-full h-full svg-reveal" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="headGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#94a3b8" />
+                        <stop offset="50%" stop-color="#475569" />
+                        <stop offset="100%" stop-color="#1e293b" />
+                    </linearGradient>
+                    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#fbbf24" />
+                        <stop offset="100%" stop-color="#b45309" />
+                    </linearGradient>
+                    <filter id="glowHammer" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="5" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                </defs>
+                <!-- Electric Shockwave -->
+                <path d="M35 55 L165 55 L155 105 L45 105 Z" fill="rgba(168,85,247,0.2)" filter="url(#glowHammer)"/>
+                <!-- Handle -->
+                <rect x="92" y="90" width="16" height="95" rx="4" fill="#78350f" stroke="#451a03" stroke-width="2"/>
+                <line x1="92" y1="110" x2="108" y2="115" stroke="#fbbf24" stroke-width="2"/>
+                <line x1="92" y1="130" x2="108" y2="135" stroke="#fbbf24" stroke-width="2"/>
+                <line x1="92" y1="150" x2="108" y2="155" stroke="#fbbf24" stroke-width="2"/>
+                <!-- Handle Pommel -->
+                <rect x="88" y="180" width="24" height="10" rx="2" fill="url(#goldAccent)"/>
+                <!-- Hammer Head Main Body -->
+                <path d="M40 45 L160 45 L150 100 L50 100 Z" fill="url(#headGrad)" stroke="#cbd5e1" stroke-width="2"/>
+                <!-- Beveled Side Caps -->
+                <path d="M40 45 L50 100 L30 90 L25 55 Z" fill="#334155" stroke="#cbd5e1" stroke-width="1.5"/>
+                <path d="M160 45 L175 55 L170 90 L150 100 Z" fill="#64748b" stroke="#cbd5e1" stroke-width="1.5"/>
+                <!-- Center Gold Inlay / Runes -->
+                <rect x="85" y="45" width="30" height="55" fill="url(#goldAccent)" opacity="0.9"/>
+                <path d="M100 55 L108 72 L92 72 Z" fill="#1e293b"/>
+                <path d="M100 90 L108 73 L92 73 Z" fill="#1e293b"/>
+                <!-- Lightning Emitting Effect -->
+                <path d="M30 40 L20 25 L32 28 L25 10" stroke="#a855f7" stroke-width="2" fill="none"/>
+                <path d="M170 40 L180 25 L168 28 L175 10" stroke="#06b6d4" stroke-width="2" fill="none"/>
+            </svg>
+        </template>
+
+        <!-- SHIELD SVG -->
+        <template id="svg-escudo">
+            <svg viewBox="0 0 200 200" class="w-full h-full svg-reveal" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#1e1b4b" />
+                        <stop offset="50%" stop-color="#312e81" />
+                        <stop offset="100%" stop-color="#0f172a" />
+                    </linearGradient>
+                    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#06b6d4" />
+                        <stop offset="50%" stop-color="#38bdf8" />
+                        <stop offset="100%" stop-color="#818cf8" />
+                    </linearGradient>
+                    <filter id="glowShield" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="6" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                </defs>
+                <!-- Aura Backing -->
+                <path d="M100 20 C 145 20, 175 35, 175 80 C 175 135, 130 175, 100 188 C 70 175, 25 135, 25 80 C 25 35, 55 20, 100 20 Z" fill="rgba(6,182,212,0.2)" filter="url(#glowShield)"/>
+                <!-- Main Body Outer Rim -->
+                <path d="M100 22 C 142 22, 170 36, 170 78 C 170 130, 128 168, 100 182 C 72 168, 30 130, 30 78 C 30 36, 58 22, 100 22 Z" fill="url(#rimGrad)" stroke="#e0f2fe" stroke-width="2"/>
+                <!-- Inner Shield Face -->
+                <path d="M100 32 C 134 32, 158 44, 158 78 C 158 122, 122 154, 100 168 C 78 154, 42 122, 42 78 C 42 44, 66 32, 100 32 Z" fill="url(#shieldGrad)"/>
+                <!-- Cross Emblem Quartering -->
+                <path d="M100 32 L100 168 M42 78 L158 78" stroke="url(#rimGrad)" stroke-width="3" opacity="0.6"/>
+                <!-- Center Boss / Star -->
+                <circle cx="100" cy="78" r="22" fill="#0284c7" stroke="#e0f2fe" stroke-width="2"/>
+                <polygon points="100,62 105,73 116,78 105,83 100,94 95,83 84,78 95,73" fill="#ffffff"/>
+                <!-- Shield Rivets -->
+                <circle cx="48" cy="48" r="3" fill="#38bdf8"/>
+                <circle cx="152" cy="48" r="3" fill="#38bdf8"/>
+                <circle cx="38" cy="88" r="3" fill="#38bdf8"/>
+                <circle cx="162" cy="88" r="3" fill="#38bdf8"/>
+                <circle cx="100" cy="160" r="3" fill="#38bdf8"/>
+            </svg>
+        </template>
+
+        <!-- UNKNOWN / FAILURE SVG -->
+        <template id="svg-desconocido">
+            <svg viewBox="0 0 200 200" class="w-full h-full svg-reveal" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="70" fill="rgba(244,63,94,0.1)" stroke="#f43f5e" stroke-width="3" stroke-dasharray="8 6"/>
+                <text x="100" y="115" font-family="'Orbitron', sans-serif" font-size="64" font-weight="900" fill="#f43f5e" text-anchor="middle">?</text>
+            </svg>
+        </template>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM ELEMENTS ---
+            const canvas = document.getElementById('drawing-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const placeholder = document.getElementById('canvas-placeholder');
+            const scanLine = document.getElementById('scan-line');
+            const colorPalette = document.getElementById('color-palette');
+            const brushSizeInput = document.getElementById('brush-size');
+            const brushSizeVal = document.getElementById('brush-size-val');
+            const btnClear = document.getElementById('btn-clear');
+            const btnUndo = document.getElementById('btn-undo');
+            const btnAnalyze = document.getElementById('btn-analyze');
+
+            // Result DOM elements
+            const resultHolder = document.getElementById('result-svg-holder');
+            const resultTitle = document.getElementById('result-title');
+            const resultDesc = document.getElementById('result-description');
+            const matchConfidence = document.getElementById('match-confidence');
+            
+            // Metrics DOM elements
+            const metricAspect = document.getElementById('metric-aspect');
+            const metricDensityTB = document.getElementById('metric-density-tb');
+            const metricCMY = document.getElementById('metric-cmy');
+            const metricPoints = document.getElementById('metric-points');
+
+            // --- CANVAS STATE ---
+            let isDrawing = false;
+            let strokeColor = '#06b6d4';
+            let strokeWidth = 12;
+            let historyStack = [];
+            let currentPath = [];
+            let totalStrokePoints = 0;
+
+            // Resize canvas appropriately based on container dimensions
+            function resizeCanvas() {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                // Store image data to preserve drawing on window resize
+                let tempImg = null;
+                if (canvas.width > 0 && canvas.height > 0) {
+                    tempImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                }
+
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+
+                // Reset context defaults
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (tempImg) {
+                    ctx.putImageData(tempImg, 0, 0);
+                } else {
+                    saveState(); // initial blank state
+                }
+            }
+
+            // Save history snapshot for Undo
+            function saveState() {
+                if (historyStack.length >= 15) historyStack.shift();
+                historyStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            }
+
+            // Undo action
+            function undo() {
+                if (historyStack.length > 1) {
+                    historyStack.pop(); // remove current state
+                    const lastState = historyStack[historyStack.length - 1];
+                    ctx.putImageData(lastState, 0, 0);
+                    checkCanvasEmpty();
+                } else if (historyStack.length === 1) {
+                    clearCanvas();
+                }
+            }
+
+            // Clear canvas completely
+            function clearCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                historyStack = [];
+                totalStrokePoints = 0;
+                saveState();
+                checkCanvasEmpty();
+                resetMetrics();
+            }
+
+            function checkCanvasEmpty() {
+                // Quick check if canvas has drawing pixels
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                let hasPixels = false;
+                for (let i = 3; i < imgData.length; i += 16) {
+                    if (imgData[i] > 10) {
+                        hasPixels = true;
+                        break;
+                    }
+                }
+                if (hasPixels) {
+                    placeholder.classList.add('hidden');
+                } else {
+                    placeholder.classList.remove('hidden');
+                }
+            }
+
+            // --- DRAWING EVENT LISTENERS ---
+            function getCanvasCoordinates(e) {
+                const rect = canvas.getBoundingClientRect();
+                let clientX = e.clientX;
+                let clientY = e.clientY;
+
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            function startDrawing(e) {
+                e.preventDefault();
+                isDrawing = true;
+                const pos = getCanvasCoordinates(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = strokeWidth;
+                
+                placeholder.classList.add('hidden');
+                totalStrokePoints++;
+            }
+
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const pos = getCanvasCoordinates(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+                totalStrokePoints++;
+            }
+
+            function stopDrawing(e) {
+                if (isDrawing) {
+                    ctx.closePath();
+                    isDrawing = false;
+                    saveState();
+                }
+            }
+
+            // Mouse listeners
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+
+            // Touch listeners for Mobile support
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            canvas.addEventListener('touchend', stopDrawing);
+
+            // Controls listeners
+            colorPalette.addEventListener('click', (e) => {
+                if (e.target.classList.contains('color-dot')) {
+                    document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
+                    e.target.classList.add('active');
+                    strokeColor = e.target.getAttribute('data-color');
+                }
+            });
+
+            brushSizeInput.addEventListener('input', (e) => {
+                strokeWidth = e.target.value;
+                brushSizeVal.textContent = strokeWidth + 'px';
+            });
+
+            btnClear.addEventListener('click', clearCanvas);
+            btnUndo.addEventListener('click', undo);
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // --- RECOGNITION ALGORITHM ENGINE ---
+            /*
+             The algorithm scans non-transparent canvas pixels to extract key features:
+             1. Bounding Box Dimensions (Width, Height, Aspect Ratio)
+             2. Center of Mass (Normalized X, Y position)
+             3. Vertical Density Distribution (Top half pixel count vs Bottom half)
+             4. Horizontal Density Distribution (Center column vs Outer flanks)
+            */
+            function analyzeDrawing() {
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imgData.data;
+                const w = canvas.width;
+                const h = canvas.height;
+
+                let minX = w, maxX = 0, minY = h, maxY = 0;
+                let pixelCount = 0;
+                let sumX = 0, sumY = 0;
+
+                // 1. Scan bounding box & Center of Mass
+                for (let y = 0; y < h; y += 2) { // Step by 2 for performance
+                    for (let x = 0; x < w; x += 2) {
+                        const alphaIdx = (y * w + x) * 4 + 3;
+                        if (data[alphaIdx] > 30) { // Solid stroke threshold
+                            pixelCount++;
+                            sumX += x;
+                            sumY += y;
+
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+
+                if (pixelCount < 60) {
+                    showResult('desconocido', 0, 'Lienzo casi vacío. Por favor dibuja algo más definido antes de escanear.', {
+                        aspect: 0, densityTB: 0, cmY: 0, points: totalStrokePoints
+                    });
+                    return;
+                }
+
+                const boundWidth = maxX - minX;
+                const boundHeight = maxY - minY;
+                const aspectRatio = boundHeight / (boundWidth || 1); // Height to Width Ratio
+
+                const centerX = sumX / pixelCount;
+                const centerY = sumY / pixelCount;
+                const normCenterY = (centerY - minY) / boundHeight; // 0 = top of bounding box, 1 = bottom
+
+                // 2. Spatial Grid Analysis (Divide bounding box into top/bottom and quadrants)
+                let topPixels = 0;
+                let bottomPixels = 0;
+                let middleColPixels = 0;
+
+                const midY = minY + boundHeight / 2;
+                const leftThird = minX + boundWidth * 0.3;
+                const rightThird = minX + boundWidth * 0.7;
+
+                for (let y = minY; y <= maxY; y += 2) {
+                    for (let x = minX; x <= maxX; x += 2) {
+                        const alphaIdx = (y * w + x) * 4 + 3;
+                        if (data[alphaIdx] > 30) {
+                            if (y < midY) topPixels++;
+                            else bottomPixels++;
+
+                            if (x >= leftThird && x <= rightThird) {
+                                middleColPixels++;
+                            }
+                        }
+                    }
+                }
+
+                const densityTopVsBottom = topPixels / (bottomPixels || 1);
+                const centerColRatio = middleColPixels / pixelCount;
+
+                // Update Realtime Metrics Display UI
+                metricAspect.textContent = aspectRatio.toFixed(2);
+                metricDensityTB.textContent = densityTopVsBottom.toFixed(2);
+                metricCMY.textContent = normCenterY.toFixed(2);
+                metricPoints.textContent = totalStrokePoints;
+
+                // 3. Classification Heuristics Logic
+                let prediction = 'desconocido';
+                let confidence = 0;
+
+                /*
+                   CLUES FOR MARTILLO (Hammer - T-Shape):
+                   - Top half significantly denser than bottom half (heavy head on top).
+                   - Center of Mass Y leans towards the top (< 0.45).
+                   - Middle vertical column contains handle.
+                */
+                const hammerScore = (densityTopVsBottom > 1.35 ? 35 : 0) +
+                                   (normCenterY < 0.42 ? 30 : 0) +
+                                   (aspectRatio >= 0.85 && aspectRatio <= 2.2 ? 20 : 0) +
+                                   (centerColRatio > 0.4 ? 15 : 0);
+
+                /*
+                   CLUES FOR ESPADA (Sword - Slender & Vertical/Diagonal):
+                   - Very tall aspect ratio (Height >> Width, e.g. > 1.8).
+                   - Balanced density between top and bottom.
+                   - High concentration in middle column.
+                */
+                const swordScore = (aspectRatio >= 1.75 ? 45 : (aspectRatio >= 1.3 ? 20 : 0)) +
+                                  (densityTopVsBottom >= 0.7 && densityTopVsBottom <= 1.4 ? 25 : 0) +
+                                  (normCenterY >= 0.4 && normCenterY <= 0.6 ? 15 : 0) +
+                                  (centerColRatio > 0.45 ? 15 : 0);
+
+                /*
+                   CLUES FOR ESCUDO (Shield - Compact & Balanced):
+                   - Aspect ratio close to 1:1 (0.75 to 1.35).
+                   - Dense coverage across width (lower center column concentration, wider edges).
+                   - Center of Mass right in the middle (~0.5).
+                */
+                const shieldScore = (aspectRatio >= 0.65 && aspectRatio <= 1.4 ? 40 : 0) +
+                                   (centerColRatio < 0.65 ? 25 : 0) +
+                                   (normCenterY >= 0.42 && normCenterY <= 0.58 ? 20 : 0) +
+                                   (densityTopVsBottom >= 0.8 && densityTopVsBottom <= 1.25 ? 15 : 0);
+
+                // Determine winner
+                if (swordScore > hammerScore && swordScore > shieldScore && swordScore >= 45) {
+                    prediction = 'espada';
+                    confidence = Math.min(98, Math.round(swordScore + 10));
+                } else if (hammerScore > swordScore && hammerScore > shieldScore && hammerScore >= 45) {
+                    prediction = 'martillo';
+                    confidence = Math.min(98, Math.round(hammerScore + 10));
+                } else if (shieldScore > swordScore && shieldScore > hammerScore && shieldScore >= 45) {
+                    prediction = 'escudo';
+                    confidence = Math.min(98, Math.round(shieldScore + 10));
+                } else {
+                    prediction = 'desconocido';
+                    confidence = 35;
+                }
+
+                // Descriptions based on outcome
+                const descriptions = {
+                    'espada': '¡Hoja filosa detectada! La alta proporción vertical y distribución en eje central identifican una Espada Arcana de combate.',
+                    'martillo': '¡Cabeza pesada y empuñadura detectada! La alta densidad superior señala un Martillo de Guerra o de Forja.',
+                    'escudo': '¡Silueta simétrica y compacta! El balance cuadrático indica un Escudo Protector de energía.',
+                    'desconocido': '¡Trazo misterioso! La magia del escáner no logra determinar la forma. Intenta dibujar más claro: una hoja alargada (espada), una cabeza en T (martillo) o una forma ancha (escudo).'
+                };
+
+                showResult(prediction, confidence, descriptions[prediction]);
+            }
+
+            // Display analysis results with animations
+            function showResult(category, confidence, description) {
+                // Trigger scanner line animation
+                scanLine.classList.add('is-scanning');
+                btnAnalyze.disabled = true;
+                btnAnalyze.classList.add('opacity-75');
+
+                setTimeout(() => {
+                    scanLine.classList.remove('is-scanning');
+                    btnAnalyze.disabled = false;
+                    btnAnalyze.classList.remove('opacity-75');
+
+                    // Clear previous SVG
+                    resultHolder.innerHTML = '';
+                    
+                    // Render matching SVG template
+                    const template = document.getElementById(`svg-${category}`);
+                    if (template) {
+                        const clone = template.content.cloneNode(true);
+                        resultHolder.appendChild(clone);
+                    }
+
+                    // Update Title & Badge UI
+                    if (category === 'espada') {
+                        resultTitle.textContent = "¡ESPADA CELESTIAL!";
+                        resultTitle.className = "title-font text-2xl font-bold text-cyan-400 mt-3";
+                        matchConfidence.textContent = `${confidence}% DE COINCIDENCIA`;
+                        matchConfidence.className = "text-xs font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/40";
+                    } else if (category === 'martillo') {
+                        resultTitle.textContent = "¡MARTILLO DE GUERRA!";
+                        resultTitle.className = "title-font text-2xl font-bold text-purple-400 mt-3";
+                        matchConfidence.textContent = `${confidence}% DE COINCIDENCIA`;
+                        matchConfidence.className = "text-xs font-mono bg-purple-950 text-purple-300 px-2 py-0.5 rounded border border-purple-500/40";
+                    } else if (category === 'escudo') {
+                        resultTitle.textContent = "¡ESCUDO PROTECTOR!";
+                        resultTitle.className = "title-font text-2xl font-bold text-emerald-400 mt-3";
+                        matchConfidence.textContent = `${confidence}% DE COINCIDENCIA`;
+                        matchConfidence.className = "text-xs font-mono bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40";
+                    } else {
+                        resultTitle.textContent = "FORMA NO RECONOCIDA";
+                        resultTitle.className = "title-font text-xl font-bold text-rose-400 mt-3";
+                        matchConfidence.textContent = "INCERTI DUMBRE";
+                        matchConfidence.className = "text-xs font-mono bg-rose-950 text-rose-300 px-2 py-0.5 rounded border border-rose-800";
+                    }
+
+                    resultDesc.textContent = description;
+                }, 1200);
+            }
+
+            function resetMetrics() {
+                metricAspect.textContent = "0.00";
+                metricDensityTB.textContent = "0.00";
+                metricCMY.textContent = "0.00";
+                metricPoints.textContent = "0";
+                matchConfidence.textContent = "ESPERANDO";
+                matchConfidence.className = "text-xs font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800/60";
+                resultTitle.textContent = "Sin Análisis Aún";
+                resultTitle.className = "title-font text-xl font-bold text-slate-300 mt-3";
+                resultDesc.textContent = 'Realiza un dibujo en el lienzo con los trazos principales del objeto y presiona "Escanear".';
+                resultHolder.innerHTML = `<i class="fa-solid fa-shield-halved text-7xl opacity-20 animate-pulse"></i>`;
+            }
+
+            // Analyze button click trigger
+            btnAnalyze.addEventListener('click', analyzeDrawing);
+        });
+    </script>
+</body>
+</html>
